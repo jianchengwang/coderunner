@@ -1,0 +1,298 @@
+<html>
+<head>
+    <title>Coderunner</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/codemirror.min.css"/>
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/theme/material-palenight.min.css"/>
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/theme/darcula.min.css"/>
+    <link rel="stylesheet"
+          href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/theme/oceanic-next.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="/static/css/sandbox.css"/>
+</head>
+<body>
+<div id="app" style="overflow-x: hidden;">
+
+    <div :class="hasFileTree? 'row' : ''">
+        <div class="col-md-2" v-if="hasFileTree" style="height: 100vh;border: 1px solid;overflow-y: auto;background: wheat;">
+            <ul>
+                <li v-for="(v,k) in fileMap" @click="selectFile(k)" style="cursor: pointer;">{{ k }}</li>
+            </ul>
+        </div>
+        <div :class="hasFileTree ? 'col-md-10' : ''" style="overflow:hidden;">
+            <div class="header row">
+                <div class="col col-auto align-self-center">
+                    <div class="title" @click="fetchGitRep">{{ sandbox.name }}</div>
+                </div>
+                <div class="col col-auto align-self-center">
+                    <div class="lang"><input id="lang" class="label" type="hidden" :value="sandbox.lang"></input></div>
+                </div>
+                <div class="col align-self-center align-items-end">
+                    <select v-if="langRunners.length > 0" v-model="sandbox.lang"
+                            @change="langChange"
+                    >
+                        <option v-for="langRunner in langRunners" :value="langRunner.Name" >{{ langRunner.Name }}</option>
+                    </select>
+                    <select v-model="currentFontSize"
+                            @change="fontSizeChange"
+                    >
+                        <option v-for="fontSize in fontSizes" :value="fontSize" >{{ fontSize }}</option>
+                    </select>
+                    <select v-model="currentTheme"
+                            @change="themeChange"
+                    >
+                        <option v-for="theme in themes" :value="theme" >{{ theme }}</option>
+                    </select>
+                </div>
+                <div class="col align-self-center align-items-end">
+                    <!--            <button id="fullscreen" type="button" class="btn btn-primary" style="float: right" @click="fullScreen">Full Screen</button>-->
+                    <!--            <button id="restore" type="button" class="btn btn-primary" style="float: right" @click="restore">Restore</button>-->
+                    <button id="run" type="button" class="btn btn-primary" style="float: right" @click="runCode">Run Code</button>
+                    <button id="restore" type="button" class="btn btn-primary" style="float: right" @click="autoFormat">Auto Format</button>
+                </div>
+            </div>
+
+            <textarea id="code" class="editor">{{ sandbox.placeholder }}</textarea>
+
+            <nav>
+                <div class="nav nav-tabs" id="nav-tab" role="tablist">
+                    <a class="nav-item nav-link active" id="nav-output-tab" data-toggle="tab" href="#nav-output" role="tab" aria-controls="nav-output" aria-selected="true">Raw Output</a>
+                    <a class="nav-item nav-link" id="nav-cmd-tab" data-toggle="tab" href="#nav-cmd" role="tab" aria-controls="nav-cmd" aria-selected="false">Cmd</a>
+                </div>
+            </nav>
+            <div class="tab-content" id="nav-tabContent">
+                <div class="tab-pane fade show active" id="nav-output" role="tabpanel" aria-labelledby="nav-output-tab">
+                    <div id="result_bar" class="result">
+                        <span id="result_data"></span>
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="nav-cmd" role="tabpanel" aria-labelledby="nav-profile-tab">
+                    <div v-if="containerId && containerLang == sandbox.lang">
+                        <div style="color: green;"><span style="color: #0069d9;">--></span> sandbox connected | containerId: {{ containerId }} | lang: {{ containerLang }}</div>
+                        <div><span style="color: #0069d9;">--></span> <input v-model="containerRunCmd" style="border: none;background: none;outline: medium;color: wheat;" />
+                        </div>
+                        </textarea>
+                    </div>
+                    <div v-else>
+                        <div style="color: orangered;"><span style="color: #0069d9;">--></span> sandbox not connected, please click run code</div>
+                    </div>
+                </div>
+            </div>
+            <div class="footer">
+                <span id="time_cost" style="float: left;"></span>
+                <span>Powered by <a target="_blank" href="https://github.com/jianchengwang">jianchengwang.</a></span>
+            </div>
+        </div>
+    </div>
+
+</div>
+<script src="https://unpkg.com/vue@next"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-base64@3.6.0/base64.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/addon/mode/loadmode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/mode/meta.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/mode/htmlmixed/htmlmixed.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/mode/clike/clike.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/mode/python/python.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/mode/go/go.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/js/bootstrap.min.js"/>
+<script src="/static/js/codemirror-compressed.js"></script>
+<script>
+    var editor;
+    var languagePlaceholder = []
+    const app = {
+        data() {
+            return {
+                lastLang: '',
+                sandbox : {
+                    name: '',
+                    lang: '',
+                    placeholder: ''
+                },
+                langRunners: [],
+
+                fontSizes: [
+                    '12px',
+                    '13px',
+                    '14px',
+                    '15px',
+                    '16px',
+                    '17px',
+                    '18px',
+                ],
+                currentFontSize: localStorage.getItem('currentFontSize')!=null?localStorage.getItem('currentFontSize'):'14px',
+
+                themes: [
+                    'material-palenight',
+                    'darcula',
+                    'oceanic-next'
+                ],
+                currentTheme: localStorage.getItem('currentTheme')!=null?localStorage.getItem('currentTheme'):'material-palenight',
+
+                hasFileTree: 0,
+                fileMap: {},
+
+                containerId: '',
+                containerLang: '',
+                containerRunCmd: '',
+            }
+        },
+        methods: {
+            initial() {
+                let _this = this
+
+                // init editor
+                editor = CodeMirror.fromTextArea(document.getElementById('code'), {
+                    lineNumbers: true,
+                    tabSize: 2,
+                    mode: ((lang) => {
+                        if(lang === 'c'){
+                            return 'text/x-csrc'
+                        }
+                        return lang
+                    })(lang),
+                    theme: _this.currentTheme
+                });
+
+                $.get(window.location.pathname + '/init', (res) => {
+                    let result = res.data;
+                    _this.sandbox = result.sandbox
+                    _this.langRunners = result.langRunners
+                    _this.langRunners.forEach(lr => {
+                        languagePlaceholder[lr.Name] = lr.Example
+                    })
+                    _this.langChange()
+                })
+
+                // Receive the code from the outside iframe.
+                window.addEventListener('message', (evt) => {
+                    if (evt.data.type === 'coderunner') {
+                        let code = Base64.decode(evt.data.code ?? '');
+                        if (code !== '') {
+                            editor.setValue(code);
+                        }
+                    }
+                }, false);
+            },
+            langChange() {
+                let _this = this
+                // Save the current code into language placeholder.
+                let code = editor.getValue();
+                if(code.length > 0 && _this.lastLang) {
+                    languagePlaceholder[_this.lastLang] = editor.getValue();
+                }
+                let lang = _this.sandbox.lang
+                _this.lastLang = lang
+                // Set the new language.
+                $('#lang').text(lang);
+                editor.setOption('mode', lang);
+                editor.setValue(languagePlaceholder[lang]);
+            },
+            fontSizeChange() {
+                localStorage.setItem("currentFontSize", this.currentFontSize)
+                $(".CodeMirror").css("font-size",this.currentFontSize)
+            },
+            themeChange() {
+                localStorage.setItem("currentTheme", this.currentTheme)
+                editor.setOption('theme', this.currentTheme);
+            },
+            restore() {
+
+            },
+            fullScreen() {
+
+            },
+            autoFormat () {
+                var totalLines = editor.lineCount();
+                var totalChars = editor.getTextArea().value.length;
+                editor.autoFormatRange({line:0,ch:0},{line:totalLines,ch:totalChars});
+            },
+            runCode() {
+                let _this = this;
+
+                $('#result_bar').css('color', 'white');
+
+                $('#result_data').text('Loading...');
+
+                $.post('', {'lang': _this.sandbox.lang, 'code': editor.getValue()}, (res) => {
+                    $('#result_data').text('');
+                    let steps = res.data.result;
+
+                    if(!(steps instanceof Array)) {
+                        steps = [{error: false, body: ""}, steps]
+                    }
+                    steps.forEach((item, index) => {
+                        if (item.body === null) {
+                            item.body = '';
+                        }
+                        // item.body = Base64.decode(item.body)
+                        if (!item.error && index === 0) {
+                            let build_details = $('<details style="color:gray;"></details>');
+                            let build_summary = $('<summary></summary>').text('Build logs');
+                            build_details.append(build_summary);
+                            build_details.append($('<p></p>').text(item.body));
+                            $('#result_data').append(build_details);
+                        } else {
+                            $('#result_data').append(item.body)
+                            if (item.error) {
+                                $('#result_bar').css('color', 'red');
+                            }
+                        }
+                    })
+
+                    let startAt = res.data.startAt;
+                    let endAt = res.data.endAt;
+                    $('#time_cost').text(((endAt - startAt) / 1000000000) + 's');
+
+                    if(res.data.containerId && res.data.containerLang) {
+                        _this.containerId = res.data.containerId
+                        _this.containerLang = res.data.containerLang
+                    }
+
+                }).fail((err) => {
+                    $('#result_bar').css('color', 'red');
+                    $('#result_data').text(err.responseJSON.msg);
+                })
+            },
+            fetchGitRep() {
+                let _this = this;
+                let gitRep = prompt("请输入Github仓库目录地址:");
+                if (!gitRep){
+                    alert("Github地址不能为空");
+                }
+                console.info(gitRep)
+                $.get('/f/gitRep', {
+                    gitRep: gitRep,
+                    lang: _this.sandbox.lang
+                }, (res) => {
+                    if(res.data.fileMap) {
+                        _this.fileMap =  res.data.fileMap
+                        _this.hasFileTree = 1
+                    } else {
+                        alert(res.msg?res.msg:"系统错误")
+                    }
+                })
+
+            },
+            selectFile(k) {
+                let _this = this
+                let code = _this.fileMap[k]
+                _this.sandbox.name = k;
+                _this.sandbox.placeholder = code
+                editor.setValue(code);
+            }
+        },
+        mounted() {
+            this.$nextTick(function(){
+                this.initial()
+            })
+        }
+    }
+    Vue.createApp(app).mount('#app')
+</script>
+</body>
+</html>
