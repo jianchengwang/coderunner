@@ -48,6 +48,8 @@ func New() *gin.Engine {
 		run.GET("/:uid", task.EditorHandler)
 		run.GET("/:uid/init", __(task.InitTaskHandler))
 		run.POST("/:uid",  __(task.RunTaskHandler))
+		run.POST("/:uid/execTerminalCmd",  __(task.ExecTerminalCmdHandler))
+		run.POST("/:uid/uploadVolumeFiles",  __(task.UploadVolumeFilesHandler))
 	}
 
 	fet := r.Group("/f")

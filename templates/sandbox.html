@@ -20,10 +20,10 @@
                 <li v-for="(v,k) in fileMap" @click="selectFile(k)" style="cursor: pointer;">{{ k }}</li>
             </ul>
         </div>
-        <div :class="hasFileTree ? 'col-md-10' : ''" style="overflow:hidden;">
+        <div :class="hasFileTree ? 'col-md-10' : ''" style="overflow:hidden;height: 100vh;">
             <div class="header row">
                 <div class="col col-auto align-self-center">
-                    <div class="title" @click="fetchGitRep">{{ sandbox.name }}</div>
+                    <div class="title">{{ sandbox.name }}</div>
                 </div>
                 <div class="col col-auto align-self-center">
                     <div class="lang"><input id="lang" class="label" type="hidden" :value="sandbox.lang"></input></div>
@@ -50,6 +50,9 @@
                     <!--            <button id="restore" type="button" class="btn btn-primary" style="float: right" @click="restore">Restore</button>-->
                     <button id="run" type="button" class="btn btn-primary" style="float: right" @click="runCode">Run Code</button>
                     <button id="restore" type="button" class="btn btn-primary" style="float: right" @click="autoFormat">Auto Format</button>
+                    <button id="fetchGitRep" type="button" class="btn btn-primary" style="float: right" @click="fetchGitRep">Fetch GitRep</button>
+                    <input id="uploadFileInput" type="file"name="files" multiple style="display:none" @change="uploadVolumeFiles" />
+                    <button id="uploadFiles" type="button" class="btn btn-primary" style="float: right" @click="clickUploadFileInput">Upload Files</button>
                 </div>
             </div>
 
@@ -57,8 +60,8 @@
 
             <nav>
                 <div class="nav nav-tabs" id="nav-tab" role="tablist">
-                    <a class="nav-item nav-link active" id="nav-output-tab" data-toggle="tab" href="#nav-output" role="tab" aria-controls="nav-output" aria-selected="true">Raw Output</a>
-                    <a class="nav-item nav-link" id="nav-cmd-tab" data-toggle="tab" href="#nav-cmd" role="tab" aria-controls="nav-cmd" aria-selected="false">Cmd</a>
+                    <a class="nav-item nav-link active" id="nav-output-tab" data-toggle="tab" href="#nav-output" role="tab" aria-controls="nav-output" aria-selected="true">Output</a>
+                    <a class="nav-item nav-link" id="nav-terminal-tab" data-toggle="tab" href="#nav-terminal" role="tab" aria-controls="nav-terminal" aria-selected="false">Terminal</a>
                 </div>
             </nav>
             <div class="tab-content" id="nav-tabContent">
@@ -67,10 +70,14 @@
                         <span id="result_data"></span>
                     </div>
                 </div>
-                <div class="tab-pane fade" id="nav-cmd" role="tabpanel" aria-labelledby="nav-profile-tab">
+                <div class="tab-pane fade" id="nav-terminal" role="tabpanel" aria-labelledby="nav-terminal-tab">
                     <div v-if="containerId && containerLang == sandbox.lang">
-                        <div style="color: green;"><span style="color: #0069d9;">--></span> sandbox connected | containerId: {{ containerId }} | lang: {{ containerLang }}</div>
-                        <div><span style="color: #0069d9;">--></span> <input v-model="containerRunCmd" style="border: none;background: none;outline: medium;color: wheat;" />
+                        <div style="color: green;"><span style="color: #0069d9;">--></span> sandbox connected | containerId: {{ containerId.substring(0,12) }} | lang: {{ containerLang }}</div>
+                        <div>
+                            <span style="color: #0069d9;">--></span> <input v-model="terminalCmd" style="border: none;background: none;outline: medium;color: wheat; width: 90%;" @keyup.enter="execTerminalCmd" />
+                            <div id="result_cmd_bar" class="result">
+                                <span id="result_cmd_data"></span>
+                            </div>
                         </div>
                         </textarea>
                     </div>
@@ -99,8 +106,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/mode/go/go.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/mode/javascript/javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/js/bootstrap.min.js"/>
-<script src="/static/js/codemirror-compressed.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/js/bootstrap.min.js"></script>
+<script src="/static/js/codemirror-compressed.js" /></script>
 <script>
     var editor;
     var languagePlaceholder = []
@@ -138,7 +145,7 @@
 
                 containerId: '',
                 containerLang: '',
-                containerRunCmd: '',
+                terminalCmd: '',
             }
         },
         methods: {
@@ -150,10 +157,7 @@
                     lineNumbers: true,
                     tabSize: 2,
                     mode: ((lang) => {
-                        if(lang === 'c'){
-                            return 'text/x-csrc'
-                        }
-                        return lang
+                        return _this.langMode(lang)
                     })(lang),
                     theme: _this.currentTheme
                 });
@@ -178,6 +182,14 @@
                     }
                 }, false);
             },
+            langMode(lang) {
+                if(lang === 'c'){
+                    return 'text/x-csrc'
+                } else if(lang === 'java') {
+                    return 'text/x-java'
+                }
+                return lang
+            },
             langChange() {
                 let _this = this
                 // Save the current code into language placeholder.
@@ -189,8 +201,13 @@
                 _this.lastLang = lang
                 // Set the new language.
                 $('#lang').text(lang);
-                editor.setOption('mode', lang);
+                editor.setOption('mode', _this.langMode(lang));
                 editor.setValue(languagePlaceholder[lang]);
+
+                $('#result_bar').css('color', 'white');
+                $('#result_data').text('');
+                $('#result_cmd_bar').css('color', 'white');
+                $('#result_cmd_data').text('');
             },
             fontSizeChange() {
                 localStorage.setItem("currentFontSize", this.currentFontSize)
@@ -261,22 +278,25 @@
             fetchGitRep() {
                 let _this = this;
                 let gitRep = prompt("请输入Github仓库目录地址:");
-                if (!gitRep){
+                if(gitRep){
+                    if(!gitRep.startsWith("https://github.com/")) {
+                        alert('目前只支持github仓库地址')
+                        return;
+                    }
+                    $.get('/f/gitRep', {
+                        gitRep: gitRep,
+                        lang: _this.sandbox.lang
+                    }, (res) => {
+                        if(res.data.fileMap) {
+                            _this.fileMap =  res.data.fileMap
+                            _this.hasFileTree = 1
+                        } else {
+                            alert(res.msg?res.msg:"系统错误")
+                        }
+                    })
+                }else if(gitRep === ""){
                     alert("Github地址不能为空");
                 }
-                console.info(gitRep)
-                $.get('/f/gitRep', {
-                    gitRep: gitRep,
-                    lang: _this.sandbox.lang
-                }, (res) => {
-                    if(res.data.fileMap) {
-                        _this.fileMap =  res.data.fileMap
-                        _this.hasFileTree = 1
-                    } else {
-                        alert(res.msg?res.msg:"系统错误")
-                    }
-                })
-
             },
             selectFile(k) {
                 let _this = this
@@ -284,6 +304,72 @@
                 _this.sandbox.name = k;
                 _this.sandbox.placeholder = code
                 editor.setValue(code);
+            },
+            clickUploadFileInput() {
+                $("#uploadFileInput").click();
+            },
+            uploadVolumeFiles(e) {
+                let _this = this
+                let files = e.target.files;
+                if(files.length > 0) {
+                    let data = new FormData();
+                    for(let i=0; i<files.length; i++) {
+                        data.append('file', files[i]);
+                    }
+                    $.ajax({
+                        type: 'POST',
+                        url: window.location.pathname + '/uploadVolumeFiles',
+                        data: data,
+                        cache: false,
+                        processData: false,
+                        contentType: false,
+                        success: function (res) {
+                            if(res.error === 0) {
+                                alert("upload success, you can exec cmd in the terminal.")
+                                if(res.data.fileMap) {
+                                    _this.fileMap =  res.data.fileMap
+                                    _this.hasFileTree = 1
+                                }
+                            } else {
+                                alert(res.msg?res.msg:"upload failed. Try again or submit issue.")
+                            }
+                        }
+                    });
+                }
+            },
+            execTerminalCmd() {
+                let _this = this;
+                if(_this.terminalCmd.length > 0) {
+                    if(_this.terminalCmd == "clear") {
+                        $('#result_cmd_bar').css('color', 'white');
+                        $('#result_cmd_data').text('');
+                        _this.terminalCmd = "";
+                    } else {
+                        $('#result_cmd_bar').css('color', 'white');
+                        $('#result_cmd_data').text('Loading...');
+                        $.post(window.location.pathname + '/execTerminalCmd', {'cmd': _this.terminalCmd}, (res) => {
+                            $('#result_cmd_data').text('');
+                            let item = res.data.result;
+                            if(!item.body) {
+                                item.body = "success";
+                            }
+                            $('#result_cmd_data').append(item.body)
+                            if (item.error) {
+                                $('#result_cmd_bar').css('color', 'red');
+                            }
+                            let startAt = res.data.startAt;
+                            let endAt = res.data.endAt;
+                            $('#time_cost').text(((endAt - startAt) / 1000000000) + 's');
+                            if(res.data.containerId && res.data.containerLang) {
+                                _this.containerId = res.data.containerId
+                                _this.containerLang = res.data.containerLang
+                            }
+                        }).fail((err) => {
+                            $('#result_cmd_bar').css('color', 'red');
+                            $('#result_cmd_data').text(err.responseJSON.msg);
+                        })
+                    }
+                }
             }
         },
         mounted() {

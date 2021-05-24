@@ -7,9 +7,9 @@ RUN echo 'Asia/Shanghai' >/etc/timezone
 RUN mkdir /etc/coderunner
 WORKDIR /etc/coderunner
 
-ADD main /etc/coderunner
+ADD coderunner /etc/coderunner
 
-RUN chmod 655 /etc/coderunner/main
+RUN chmod 655 /etc/coderunner/coderunner
 
-ENTRYPOINT ["/etc/coderunner/main"]
+ENTRYPOINT ["/etc/coderunner/coderunner"]
 EXPOSE 8080

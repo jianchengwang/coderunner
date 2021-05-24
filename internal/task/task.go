@@ -26,7 +26,7 @@ type Task struct {
 	cli         *client.Client
 	ContainerID string
 
-	sourceVolumePath string // Folder in Host: /home/<your_user>/coderunner/volume/<UUID>/
+	SourceVolumePath string // Folder in Host: /home/<your_user>/coderunner/volume/<UUID>/
 	fileName         string
 }
 
@@ -76,7 +76,7 @@ func NewTask(language string, code []byte) (*Task, error) {
 		UUID:             uid,
 		RUNNER:           runner,
 		cli:              cli,
-		sourceVolumePath: sourceVolumePath,
+		SourceVolumePath: sourceVolumePath,
 		fileName:         fileName,
 	}, nil
 }
@@ -96,7 +96,7 @@ func (t *Task) Run() ([]*Output, error) {
 			Mounts: []mount.Mount{
 				{
 					Type:   mount.TypeBind,
-					Source: t.sourceVolumePath,
+					Source: t.SourceVolumePath,
 					Target: RuntimePath,
 				},
 			},
@@ -127,7 +127,7 @@ func (t *Task) Run() ([]*Output, error) {
 	}
 
 	// Execute code.
-	runOutput, err := t.Exec()
+	runOutput, err := t.Exec("")
 	if err != nil {
 		return output, err
 	}
@@ -138,7 +138,7 @@ func (t *Task) Run() ([]*Output, error) {
 
 func (t *Task) setupEnvironment() (*Output, error) {
 	if len(t.RUNNER.BuildCmd) != 0 {
-		return t.Exec()
+		return t.Exec("")
 	}
 	return &Output{}, nil
 }
@@ -168,15 +168,16 @@ func (t *Task) CreateFile(code []byte) (*Output, error) {
 	return nil, nil
 }
 
-func (t *Task) Exec() (*Output, error) {
-	var cmd string
-	if len(t.RUNNER.BuildCmd) > 0 {
-		cmd = t.RUNNER.BuildCmd + " && " + t.RUNNER.RunCmd
-	} else {
-		cmd = t.RUNNER.RunCmd
+func (t *Task) Exec(cmd string) (*Output, error) {
+	if len(cmd) == 0 {
+		if len(t.RUNNER.BuildCmd) > 0 {
+			cmd = t.RUNNER.BuildCmd + " && " + t.RUNNER.RunCmd
+		} else {
+			cmd = t.RUNNER.RunCmd
+		}
 	}
 	idResponse, err := t.cli.ContainerExecCreate(t.ctx, t.ContainerID, types.ExecConfig{
-		Env: []string{"GOPROXY=https://goproxy.io,direct"},
+		Env: t.RUNNER.Env,
 		Cmd:[]string{"/bin/sh", "-c", cmd},
 		Tty:true,
 		AttachStderr:true,
@@ -228,7 +229,7 @@ func (t *Task) Clean() {
 		log.Error("Failed to remove container: %v", err)
 	}
 
-	err := os.RemoveAll(t.sourceVolumePath)
+	err := os.RemoveAll(t.SourceVolumePath)
 	if err != nil {
 		log.Error("Failed to remove volume folder: %v", err)
 	}

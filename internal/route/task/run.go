@@ -3,7 +3,9 @@ package route
 import (
 	r "github.com/jianchengwang/coderunner/internal/response"
 	"github.com/thanhpk/randstr"
+	"io/ioutil"
 	"net/http"
+	"path"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -95,7 +97,7 @@ func RunTaskHandler(c *gin.Context) (int, interface{}) {
 				return r.MakeErrJSON(500, "Failed to create code file: %v", err)
 			}
 		}
-		output, err := t.Exec()
+		output, err := t.Exec("")
 		if err != nil {
 			if err != nil {
 				return r.MakeErrJSON(500, "Failed to exec cmd: %v", err)
@@ -110,4 +112,65 @@ func RunTaskHandler(c *gin.Context) (int, interface{}) {
 			"endAt":   endAt,
 		})
 	}
+}
+
+func ExecTerminalCmdHandler(c *gin.Context) (int, interface{}) {
+	uid := c.Param("uid")
+	cmd := c.PostForm("cmd")
+	if len(cmd) == 0 {
+		return r.MakeErrJSON(401, "Cmd cant be empty")
+	}
+	sandbox, prs := task.SandboxMap[uid]
+	if !prs {
+		return r.MakeErrJSON(404, "Cant find uid task container")
+	}
+	t := sandbox.T
+	startAt := time.Now().UnixNano()
+	output, err := t.Exec(cmd)
+	if err != nil {
+		if err != nil {
+			return r.MakeErrJSON(500, "Failed to exec cmd: %v", err)
+		}
+	}
+	endAt := time.Now().UnixNano()
+	return r.MakeSuccessJSON(gin.H{
+		"containerId": t.ContainerID,
+		"containerLang": t.RUNNER.Name,
+		"result":   output,
+		"startAt": startAt,
+		"endAt":   endAt,
+	})
+}
+
+func UploadVolumeFilesHandler(c *gin.Context) (int, interface{}) {
+	uid := c.Param("uid")
+	sandbox, prs := task.SandboxMap[uid]
+	if !prs {
+		return r.MakeErrJSON(404, "Cant find uid task container")
+	}
+	sourceVolume := sandbox.T.SourceVolumePath
+	form, err := c.MultipartForm()
+	if err !=nil{
+		return r.MakeErrJSON(500, "Failed to upload volume files: %v", err)
+	}
+	files := form.File["file"]
+	fileMap := map[string]string{}
+	for _, file := range files {
+		if err := c.SaveUploadedFile(file, path.Join(sourceVolume, file.Filename)); err !=nil{
+			return r.MakeErrJSON(500, "Failed to save volume file: %v", err)
+		}
+		if path.Ext(file.Filename) == sandbox.T.RUNNER.Ext {
+			data, err := ioutil.ReadFile(path.Join(sourceVolume,file.Filename))
+			if err != nil {
+				panic(err)
+			}
+			fileMap[file.Filename] = string(data)
+		}
+	}
+	if len(fileMap) > 0 {
+		return r.MakeSuccessJSON(gin.H{
+			"fileMap": fileMap,
+		})
+	}
+	return r.MakeSuccessJSON(nil)
 }
