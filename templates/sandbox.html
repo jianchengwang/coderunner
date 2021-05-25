@@ -1,6 +1,6 @@
 <html>
 <head>
-    <title>Coderunner</title>
+    <title>coderunner</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/codemirror.min.css"/>
     <link rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.61.1/theme/material-palenight.min.css"/>
@@ -66,7 +66,7 @@
             </nav>
             <div class="tab-content" id="nav-tabContent">
                 <div class="tab-pane fade show active" id="nav-output" role="tabpanel" aria-labelledby="nav-output-tab">
-                    <div id="result_bar" class="result">
+                    <div id="result_bar" class="result" style="padding-bottom: 20px;">
                         <span id="result_data"></span>
                     </div>
                 </div>
@@ -75,7 +75,7 @@
                         <div style="color: green;"><span style="color: #0069d9;">--></span> sandbox connected | containerId: {{ containerId.substring(0,12) }} | lang: {{ containerLang }}</div>
                         <div>
                             <span style="color: #0069d9;">--></span> <input v-model="terminalCmd" style="border: none;background: none;outline: medium;color: wheat; width: 90%;" @keyup.enter="execTerminalCmd" />
-                            <div id="result_cmd_bar" class="result">
+                            <div id="result_cmd_bar" class="result" style="padding-bottom: 20px;">
                                 <span id="result_cmd_data"></span>
                             </div>
                         </div>
@@ -116,7 +116,7 @@
             return {
                 lastLang: '',
                 sandbox : {
-                    name: '',
+                    name: '未命名',
                     lang: '',
                     placeholder: ''
                 },
@@ -208,6 +208,10 @@
                 $('#result_data').text('');
                 $('#result_cmd_bar').css('color', 'white');
                 $('#result_cmd_data').text('');
+
+                _this.sandbox.name = "未命名"
+                _this.hasFileTree = false
+                _this.fileMap = {}
             },
             fontSizeChange() {
                 localStorage.setItem("currentFontSize", this.currentFontSize)
@@ -235,7 +239,12 @@
 
                 $('#result_data').text('Loading...');
 
-                $.post('', {'lang': _this.sandbox.lang, 'code': editor.getValue()}, (res) => {
+                $.post('',
+                    {
+                        'lang': _this.sandbox.lang,
+                        'code': editor.getValue(),
+                        'fileName': _this.sandbox.name
+                    }, (res) => {
                     $('#result_data').text('');
                     let steps = res.data.result;
 

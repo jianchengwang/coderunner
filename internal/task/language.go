@@ -6,6 +6,7 @@ type runner struct {
 	Image    string
 	BuildCmd string
 	RunCmd   string
+	DefaultFileName string
 	Env 	 []string
 	MaxCPUs  int64
 	MaxMemory int64
@@ -20,6 +21,7 @@ var LangRunners = []runner{
 		BuildCmd: "rm -rf go.mod && go mod init code-runner && go build -v .",
 		RunCmd:   "./code-runner",
 		Env: []string{"GOPROXY=https://goproxy.io,direct"},
+		DefaultFileName: "code.go",
 		MaxCPUs: 2,
 		MaxMemory: 100,
 		Example: "package main\n\n" +
@@ -35,6 +37,7 @@ var LangRunners = []runner{
 		BuildCmd: "",
 		RunCmd:   "python3 code.py",
 		Env: []string{},
+		DefaultFileName: "code.py",
 		MaxCPUs: 2,
 		MaxMemory: 100,
 		Example: "print(\"hello world.\")",
@@ -46,6 +49,7 @@ var LangRunners = []runner{
 		BuildCmd: "javac code.java",
 		RunCmd:   "java code",
 		Env: []string{},
+		DefaultFileName: "code.java",
 		MaxCPUs: 2,
 		MaxMemory: 100,
 		Example: "class code {\n  public static void main(String[] args) {\n    System.out.println(\"Hello, World!\"); \n  }\n}",
@@ -57,6 +61,7 @@ var LangRunners = []runner{
 		BuildCmd: "npm config set registry https://registry.npm.taobao.org",
 		RunCmd:   "node code.js",
 		Env: []string{},
+		DefaultFileName: "code.js",
 		MaxCPUs: 2,
 		MaxMemory: 50,
 		Example: "console.log(\"hello world.\");",
@@ -68,6 +73,7 @@ var LangRunners = []runner{
 		BuildCmd: "gcc -v code.c -o code",
 		RunCmd:   "./code",
 		Env: []string{},
+		DefaultFileName: "code.c",
 		MaxCPUs: 2,
 		MaxMemory: 50,
 		Example: "#include <stdio.h>\nint main()\n{\n  printf(\"Hello, World!\");\n  return 0;\n}",

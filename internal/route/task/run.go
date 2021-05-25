@@ -53,6 +53,7 @@ func RunTaskHandler(c *gin.Context) (int, interface{}) {
 	uid := c.Param("uid")
 	selectLang := c.PostForm("lang")
 	code := c.PostForm("code")
+	fileName := c.PostForm("fileName")
 
 	sandbox, prs := task.SandboxMap[uid]
 	var t *task.Task
@@ -62,7 +63,7 @@ func RunTaskHandler(c *gin.Context) (int, interface{}) {
 	hh, _ := time.ParseDuration("1h")
 	expireTime := sandbox.LastOptTime.Add(hh)
 	if !prs || len(t.ContainerID)==0 || t.RUNNER.Name != selectLang || expireTime.Before(time.Now()) {
-		if t != nil {
+		if t != nil && len(t.ContainerID) > 0 {
 			t.Clean()
 		}
 		t, err := task.NewTask(selectLang, []byte(code))
@@ -91,13 +92,13 @@ func RunTaskHandler(c *gin.Context) (int, interface{}) {
 	} else {
 		sandbox.LastOptTime = time.Now()
 		startAt := time.Now().UnixNano()
-		_, err := t.CreateFile([]byte(code))
+		_, err := t.CreateFile(code, fileName)
 		if err != nil {
 			if err != nil {
 				return r.MakeErrJSON(500, "Failed to create code file: %v", err)
 			}
 		}
-		output, err := t.Exec("")
+		output, err := t.Exec("", fileName)
 		if err != nil {
 			if err != nil {
 				return r.MakeErrJSON(500, "Failed to exec cmd: %v", err)
@@ -126,7 +127,7 @@ func ExecTerminalCmdHandler(c *gin.Context) (int, interface{}) {
 	}
 	t := sandbox.T
 	startAt := time.Now().UnixNano()
-	output, err := t.Exec(cmd)
+	output, err := t.Exec(cmd, "")
 	if err != nil {
 		if err != nil {
 			return r.MakeErrJSON(500, "Failed to exec cmd: %v", err)

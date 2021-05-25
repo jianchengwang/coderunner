@@ -12,6 +12,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strings"
 	log "unknwon.dev/clog/v2"
 )
 
@@ -127,7 +128,7 @@ func (t *Task) Run() ([]*Output, error) {
 	}
 
 	// Execute code.
-	runOutput, err := t.Exec("")
+	runOutput, err := t.Exec("", "")
 	if err != nil {
 		return output, err
 	}
@@ -138,12 +139,12 @@ func (t *Task) Run() ([]*Output, error) {
 
 func (t *Task) setupEnvironment() (*Output, error) {
 	if len(t.RUNNER.BuildCmd) != 0 {
-		return t.Exec("")
+		return t.Exec("", "")
 	}
 	return &Output{}, nil
 }
 
-func (t *Task) CreateFile(code []byte) (*Output, error) {
+func (t *Task) CreateFile(code string, fileName string) (*Output, error) {
 	// Create a new docker client.
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts()
@@ -158,9 +159,15 @@ func (t *Task) CreateFile(code []byte) (*Output, error) {
 		return nil, err
 	}
 
-	fileName := "code" + t.RUNNER.Ext
+	if len(fileName) == 0 || t.RUNNER.Name != "java" || path.Ext(fileName) != t.RUNNER.Ext  {
+		fileName = "code" + t.RUNNER.Ext
+	} else {
+		if strings.HasPrefix(code, "package") {
+			code = code[strings.Index(code, "\n"):]
+		}
+	}
 	filePath := path.Join(sourceVolumePath, fileName)
-	err = ioutil.WriteFile(filePath, code, 0755)
+	err = ioutil.WriteFile(filePath, []byte(code), 0755)
 	if err != nil {
 		return nil, err
 	}
@@ -168,10 +175,15 @@ func (t *Task) CreateFile(code []byte) (*Output, error) {
 	return nil, nil
 }
 
-func (t *Task) Exec(cmd string) (*Output, error) {
+func (t *Task) Exec(cmd string, fileName string) (*Output, error) {
 	if len(cmd) == 0 {
 		if len(t.RUNNER.BuildCmd) > 0 {
-			cmd = t.RUNNER.BuildCmd + " && " + t.RUNNER.RunCmd
+			// java file check
+			if len(fileName) > 0 && t.RUNNER.Name == "java" && path.Ext(fileName) == t.RUNNER.Ext {
+				cmd = strings.ReplaceAll(t.RUNNER.BuildCmd, t.RUNNER.DefaultFileName, fileName) + " && "+ strings.ReplaceAll(t.RUNNER.RunCmd, "code", strings.ReplaceAll(fileName, t.RUNNER.Ext, ""))
+			} else {
+				cmd = t.RUNNER.BuildCmd + " && " + t.RUNNER.RunCmd
+			}
 		} else {
 			cmd = t.RUNNER.RunCmd
 		}
